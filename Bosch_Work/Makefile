@@ -1,13 +1,11 @@
-CC = g++
+CC = gcc
 CFLAGS = -lzmq -o 
 
-default: sample
+default: server
 
-sample:
-	$(CC) -g hwclient.cpp $(CFLAGS) hwclien
-	$(CC) -g hwserver.cpp $(CFLAGS) hwserve
+server:
+	$(CC) -g Client1_Imp.c p1363.c miracl.a $(CFLAGS) shared_secret
 
 clean:
-	$(RM) hwclien
-	$(RM) hwserve
+	$(RM) shared_secret
 
