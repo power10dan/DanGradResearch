@@ -13,8 +13,6 @@ typedef struct{
 	octet key_3;
 	// mac address of each client
 	octet MAC;
-	octet MAC_1;
-	octet MAC_3;
 
 } key_mac;
 

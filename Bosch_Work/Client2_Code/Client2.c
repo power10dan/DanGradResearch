@@ -17,16 +17,16 @@
 int main(){
 
 	key_mac mac_ciph_pair;
-	OCTET_INIT(&(mac_ciph_pair.key), MAC_SIZE);
-	OCTET_INIT(&(mac_ciph_pair.MAC), MAC_SIZE);
-	OCTET_INIT(&(mac_ciph_pair.cipher), MAC_SIZE);
-	OCTET_INIT(&(mac_ciph_pair.key_1), MAC_SIZE);
-	OCTET_INIT(&(mac_ciph_pair.key_3), MAC_SIZE);
+	OCTET_INIT(&(mac_ciph_pair.key), OCTET_SIZE);
+	OCTET_INIT(&(mac_ciph_pair.MAC), OCTET_SIZE);
+	OCTET_INIT(&(mac_ciph_pair.cipher), OCTET_SIZE);
+	OCTET_INIT(&(mac_ciph_pair.key_1), OCTET_SIZE);
+	OCTET_INIT(&(mac_ciph_pair.key_3), OCTET_SIZE);
 
 	mac_ciph_pair = key_gen(mac_ciph_pair, 1, CLIENT_1);
 	mac_ciph_pair = key_gen(mac_ciph_pair, 4, CLIENT_2);
 	mac_ciph_pair = key_gen(mac_ciph_pair, 5, CLIENT_3);
-	mac_ciph_pair = encrypt("response", mac_ciph_pair);
+	mac_ciph_pair = encrypt("DURRR Saur", mac_ciph_pair);
 	communicate(mac_ciph_pair);
 
 }
@@ -34,10 +34,8 @@ int main(){
 void communicate(key_mac mac_ciph){
 	octet cipher;
 	char val[CIPHER_SIZE];
-	int i;
 
-	OCTET_INIT(&cipher, CIPHER_SIZE);
-	
+	OCTET_INIT(&cipher, OCTET_SIZE);
 	// socket inits
 	void *context = zmq_ctx_new();
 	void *responder = zmq_socket(context, ZMQ_REP);
@@ -47,12 +45,15 @@ void communicate(key_mac mac_ciph){
 	printf("Server waiting\n");
 	zmq_recv(responder, val, OCTET_SIZE, 0);
 	printf("Message Received\n");
-	zmq_send(responder, mac_ciph.cipher.val, OCTET_SIZE, 0);
+	OCTET_JOIN_OCTET(&(mac_ciph.cipher), &(mac_ciph.MAC));
+
+	zmq_send(responder, mac_ciph.MAC.val, OCTET_SIZE, 0);	
 	printf("response message sent\n");
 	OCTET_JOIN_STRING(val, &cipher);
 	zmq_close(responder);
 	zmq_ctx_destroy(context);
 	decrypt(cipher, mac_ciph);
+
 }
 
 // Compute various client's keys
@@ -84,26 +85,30 @@ key_mac key_gen(key_mac MAC_ciph, int value, int client){
 }
 
 void decrypt(octet cipher, key_mac mac_cipher_p){
-	octet plain_txt;
+	octet plain_txt, parsed_cipher, mac;
 
 	OCTET_INIT(&plain_txt, OCTET_SIZE);	
+	OCTET_INIT(&mac, OCTET_SIZE);
+	OCTET_INIT(&parsed_cipher, OCTET_SIZE);
+	OCTET_INIT(&mac, OCTET_SIZE);
 
-	BOOL res_dec = AES_CBC_IV0_DECRYPT(&(mac_cipher_p.key_1), 
-										&cipher, NULL, &plain_txt,
-											NULL);
-	if(res_dec == 1){
+	OCTET_CHOP(&cipher, 20, &parsed_cipher);
+	BOOL rs = MAC1(&parsed_cipher, NULL, &(mac_cipher_p.key_1), 20, SHA256, &mac);
+	
+	if(OCTET_COMPARE(&cipher, &mac)){
+
+		BOOL res_dec = AES_CBC_IV0_DECRYPT(&(mac_cipher_p.key_1), 
+							&parsed_cipher, NULL, &plain_txt, NULL);
 		printf("Decryption Success\n");
+
+		printf("My Plain text is: ");
+		OCTET_PRINT_STRING(&plain_txt);
+		printf("\n");
+	} else {
+		printf("Decryption failed\n");
+
 	}
-
-	if(res_dec == 0){
-		BOOL res_dec2 = AES_CBC_IV0_DECRYPT(&(mac_cipher_p.key_3), &cipher,
-									NULL, &plain_txt, NULL);
-	}
-
-	printf("My Plain text is: ");
-	OCTET_PRINT_STRING(&plain_txt);
-	printf("\n");
-
+	
 }
 
 
@@ -121,8 +126,11 @@ key_mac encrypt(char* message, key_mac key_ciph){
 	
 	BOOL res = MAC1(&cipher, NULL, &(key_ciph.key), MAC_SIZE, 
 							SHA256, &(key_ciph.MAC));
+	
 	OCTET_COPY(&cipher, &(key_ciph.cipher));
 	printf("Encryption Complete\n");
 
 	return key_ciph;
 }
+
+
