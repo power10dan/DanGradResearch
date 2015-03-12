@@ -14,7 +14,7 @@
 #define MAC_SIZE 20
 #define CIPHER_SIZE 100
 
-int main(){
+int main(int argc, char *argv[]){
 	
 	key_mac mac_ciph_pair;
 	
@@ -31,9 +31,17 @@ int main(){
 	// encryption ops
 	mac_ciph_pair = encrypt("MY Secret", mac_ciph_pair);
 	// socket ops
-	communicate(mac_ciph_pair.cipher, mac_ciph_pair);
-}
+	if(strcmp(argv[1], "2") == 0){
+		printf("Sending to client 2\n");
+		communicate(mac_ciph_pair.cipher, mac_ciph_pair, CLIENT_2);
+	}
 
+	if(strcmp(argv[1], "3")== 0){
+		printf("Sending to client 3\n");
+		communicate(mac_ciph_pair.cipher, mac_ciph_pair, CLIENT_3);
+	}
+
+}
 
 // compute key values for various clients, 
 // value represents the value of the key
@@ -85,29 +93,32 @@ key_mac encrypt(char* message, key_mac mac_ciph){
 
 void decrypt(octet cipher_txt, key_mac mac_ciph){
 
-	octet plain_txt, new_cipher;
+	octet plain_txt, new_cipher, mac;
 
 	OCTET_INIT(&new_cipher, OCTET_SIZE);
-	OCTET_INIT(&plain_txt, OCTET_SIZE); 
-	
-	BOOL res_decrypt = AES_CBC_IV0_DECRYPT(&(mac_ciph.key_2), 
-						&cipher_txt, NULL, &plain_txt,NULL);
+	OCTET_INIT(&plain_txt, OCTET_SIZE);
+    OCTET_INIT(&mac, OCTET_SIZE);
+	OCTET_CHOP(&cipher_txt, 20, &new_cipher);
 
-	if(res_decrypt == 1){
-		printf("Decryption success\n");
+	BOOL res = MAC1(&new_cipher, NULL, &(mac_ciph.key_2), 
+					20, SHA256, &mac);
+
+	if(OCTET_COMPARE(&cipher_txt, &(mac))){
+
+		BOOL res_decrypt = AES_CBC_IV0_DECRYPT(&(mac_ciph.key_2), 
+							&new_cipher, NULL, &plain_txt,NULL);
+		printf("Decryption Success\n");
+		printf("My plain text: ");
+		OCTET_PRINT_STRING(&plain_txt);
+		printf("\n");
+	} else {
+		printf("Decryption failed\n");
 	}
 
-	if(res_decrypt == 0){
-		BOOL res_decrypt2 = AES_CBC_IV0_DECRYPT(&(mac_ciph.key_3), 
-					&cipher_txt, NULL, &plain_txt, NULL);
-	}		
 			
-	printf("My plain text: ");
-	OCTET_PRINT_STRING(&plain_txt);
-	printf("\n");
 }
 
-void communicate(octet MAC_cipher, key_mac mac_ciph_pair){
+void communicate(octet MAC_cipher, key_mac mac_ciph_pair, int client){
 
 	octet cipher, recv_cipher;
 	OCTET_INIT(&cipher, OCTET_SIZE);
@@ -116,18 +127,28 @@ void communicate(octet MAC_cipher, key_mac mac_ciph_pair){
 
 	void *context = zmq_ctx_new();
 	void *requester = zmq_socket (context, ZMQ_REQ);
+	// check which client to send to
+	if(client == 2){
+		printf("Connecting to client 2...\n");
+		zmq_connect(requester, "tcp://192.168.191.142:5555");
+	} else {
+		printf("Connecting to client 3...\n");
+		zmq_connect(requester, "tcp://192.168.191.145:5557");
 
-	zmq_connect(requester, "tcp://192.168.38.145:5555");
+	}
+
+	// concatenate MAC with cipher and send	
+	OCTET_JOIN_OCTET(&(MAC_cipher), &(mac_ciph_pair.MAC));	
 	// first, send out MAC address
-
 	printf("sending cipher text\n");
-	zmq_send(requester, MAC_cipher.val, OCTET_SIZE, 0); 
+	zmq_send(requester, mac_ciph_pair.MAC.val, OCTET_SIZE, 0); 
+	printf("receiving cipher\n");
 	zmq_recv(requester, cipher_val, OCTET_SIZE,0);
+	// join cipher into another octet
 	OCTET_JOIN_STRING(cipher_val, &recv_cipher);
-
 	zmq_close(requester);	
 	zmq_ctx_destroy(context);
-	
+	// decrypt the cipher
 	decrypt(recv_cipher, mac_ciph_pair);
 	
 	printf("Operation Complete\n");

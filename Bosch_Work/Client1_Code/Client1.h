@@ -15,7 +15,7 @@ typedef struct{
 } key_mac;
 
 // client function prototypes
-void communicate(octet, key_mac);
+void communicate(octet, key_mac, int);
 key_mac key_gen(key_mac, int, int);
 key_mac encrypt(char*, key_mac);
 void decrypt(octet, key_mac);
